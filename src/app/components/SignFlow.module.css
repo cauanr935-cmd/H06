@@ -1,0 +1,103 @@
+.flow {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: left;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.campo label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-black);
+}
+
+.campo input {
+  font-family: inherit;
+  font-size: 16px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-white);
+  color: var(--color-black);
+  transition: border-color 0.15s ease;
+}
+
+.campo input:focus {
+  outline: none;
+  border-color: var(--color-green);
+}
+
+.campo input:disabled {
+  opacity: 0.6;
+}
+
+.inputErro,
+.inputErro:focus {
+  border-color: #b3261e;
+}
+
+.erro {
+  margin: 0;
+  font-size: 13px;
+  color: #b3261e;
+}
+
+.formError {
+  padding: 12px 14px;
+  border: 1.5px solid #b3261e;
+  border-radius: 8px;
+  background: #fdecea;
+  color: #611a15;
+  font-size: 14px;
+}
+
+.submit {
+  margin-top: 4px;
+  width: 100%;
+}
+
+.embed {
+  width: 100%;
+}
+
+.embed:focus {
+  outline: none;
+}
+
+.sucesso {
+  padding: 16px 18px;
+  border: 1.5px solid var(--color-green);
+  border-radius: 8px;
+  background: #eaf5ee;
+  margin-bottom: 16px;
+}
+
+.sucesso h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  color: var(--color-green-dark);
+}
+
+.sucesso h3:focus {
+  outline: none;
+}
+
+.sucesso p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-black);
+}
+
+@media (max-width: 640px) {
+  .flow {
+    max-width: 100%;
+  }
+}

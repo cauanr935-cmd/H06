@@ -1,6 +1,10 @@
 # Prompts por Fase — Claude Code CLI
 
-**Como usar:** substitua o `claude.md` antigo pelo `CLAUDE.md` novo, rode `claude` na raiz do repo e cole um prompt por vez. Não pule fases.
+**Como usar:** rode `claude` na raiz do repo e cole um prompt por vez. Não pule fases. (O swap `claude.md` → `CLAUDE.md` já foi feito.)
+
+> **Contrato do `/api/init-form` mudou na Fase A.** Onde as fases abaixo citam
+> `{ name, email }`, vale `{ name, phone, email? }` → `{ slug, embed_src, lead_id }`.
+> Ver a seção "Fase A" para o contrato completo.
 
 ```bash
 cd ~/Projects/Startup/H06
@@ -38,94 +42,74 @@ Não corrija nada ainda. Só reporte, e proponha as correções que faria no CLA
 
 ---
 
-## Fase A — Route Handler `/api/init-form`
+## Fase A — Route Handler `/api/init-form` ✅ IMPLEMENTADA
+
+> Feito em 30/08/2026. O contrato abaixo **substitui** o do prompt original
+> (`{ name, email }`), que foi escrito antes das decisões sobre telefone como
+> identificador principal e e-mail opcional (ver `documentos/TEMPLATE-DOCUSEAL.md`).
+
+**Contrato final:**
 
 ```
-Contexto: o front da LP já existe. Falta a camada server-side que cria a submission
-no DocuSeal e devolve o embed_src para o browser.
-
-Tarefa:
-1. Crie o Route Handler POST /api/init-form (App Router, runtime nodejs,
-   dynamic force-dynamic).
-2. Separe a lógica em módulos testáveis, não deixe tudo no route.js:
-   - src/lib/docuseal/client.js    -> cliente da API, com fetch injetável
-   - src/lib/docuseal/validate.js  -> validação e normalização do payload
-   - src/app/api/init-form/route.js -> só wiring HTTP
-3. Contrato:
-   Request:  { name: string, email: string, values?: object }
-   200:      { slug, embed_src }
-   400:      { error: "name_required" | "invalid_email" | "invalid_json" }
-   502:      { error: "upstream_error" }
-   500:      { error: "server_misconfigured" }
-4. Crie .env.example com as chaves vazias e documente cada uma.
-
-Restrições (ver "Regras invioláveis" no CLAUDE.md):
-- Nenhuma variável com prefixo NEXT_PUBLIC_
-- Corpo de erro do DocuSeal NUNCA vai para a resposta HTTP, só para console.error
-- E-mail mascarado no log (t***@exemplo.com)
-- Timeout de 15s na chamada ao DocuSeal, via AbortSignal.timeout
-- Cache-Control: no-store em todas as respostas
-- A resposta da API do DocuSeal é um ARRAY — trate também o formato
-  { submitters: [...] } por tolerância
-
-Casos de teste obrigatórios:
-- nome vazio ou só espaços -> 400 name_required
-- e-mail inválido (sem @, sem TLD, com espaço interno) -> 400 invalid_email
-- e-mail com maiúsculas e espaços nas pontas -> normalizado
-- nome acima de 120 chars -> truncado, não rejeitado
-- JSON malformado -> 400 invalid_json
-- env ausente -> 500 server_misconfigured, sem tentar chamar o DocuSeal
-- fetch 401 -> 502 e o corpo do upstream NÃO aparece na resposta
-- fetch devolve array com slug -> 200 com {slug, embed_src}
-- fetch devolve { submitters: [...] } -> 200
-- fetch devolve array vazio -> 502
-- timeout -> 502, sem exceção não tratada
-- values passado no payload -> repassado ao submitter
-- values ausente -> chave não enviada ao DocuSeal
-
-Critérios de aceite:
-- Suíte passa com o runner identificado no Prompt 0. Se não houver runner,
-  configure vitest e adicione o script "test" ao package.json.
-- npm run lint limpo
-- Teste manual com npm run dev:
-  curl -sS -X POST http://localhost:3000/api/init-form \
-    -H 'Content-Type: application/json' \
-    -d '{"name":"Teste Silva","email":"teste@exemplo.com"}'
-  deve devolver slug e embed_src, e o embed_src deve abrir o formulário de
-  assinatura no browser sem pedir login.
-
-PRÉ-REQUISITO: o template precisa existir no admin do DocuSeal e o .env.local
-precisa estar preenchido. Se o curl falhar com upstream_error, leia o
-console.error do terminal do next dev antes de mexer no código — as causas mais
-comuns são template_id inexistente, token inválido ou nome de role divergente
-do definido no template.
-
-Ao terminar, mostre a saída dos testes e do curl.
+Request:  { name: string, phone: string, email?: string, values?: object }
+200:      { slug, embed_src, lead_id }
+400:      { error: "name_required" | "phone_required" | "invalid_phone" | "invalid_email" | "invalid_json" }
+502:      { error: "upstream_error" }
+500:      { error: "server_misconfigured" }
 ```
+
+- `phone` obrigatório, normalizado para E.164 (`src/lib/phone.js`); `email` só
+  validado se preenchido; `lead_id` = `randomUUID()` gerado no handler e devolvido
+  para o front correlacionar com o webhook (Fase C).
+- `values` do cliente passa por allowlist (`CAMPOS_PERMITIDOS` em
+  `src/lib/docuseal/validate.js`): `municipio_uf`, `area_hectares`, `car`,
+  `qualidade`. `nome_completo` e `telefone` são montados no servidor.
+
+**Arquivos:** `src/app/api/init-form/route.js` (wiring), `src/lib/phone.js`,
+`src/lib/mask.js`, `src/lib/docuseal/{config,validate,client}.js` + `*.test.js`.
+Runner: **vitest** (`npm run test`). `.env.example` na raiz.
+
+**Restrições aplicadas:** sem `NEXT_PUBLIC_`; corpo de erro do upstream só em
+`console.error`; e-mail e telefone mascarados no log; timeout 15s via
+`AbortSignal.timeout`; `Cache-Control: no-store` em todas as respostas; aceita
+resposta em array **ou** `{ submitters: [...] }`.
+
+Verificado com `curl` real contra a instância: 200 com `slug`/`embed_src`/`lead_id`,
+`embed_src` abre sem login, log mascarado.
 
 ---
 
-## Fase B — Embed integrado ao front existente
+## Fase B — Formulário + embed no front
 
 ```
-Contexto: o formulário da carta de intenção já existe no front. NÃO redesenhe a UI,
-NÃO crie página nova. Integre o embed no fluxo que já está lá, respeitando os
-componentes, cores (verde bandeira / branco / preto) e tipografia (Montserrat)
-existentes.
+Contexto: NÃO existe formulário no front hoje. As seções (Hero, SignCta) só têm
+<a href="#"> inertes (SIGN_HREF em src/app/page.js). Esta fase CRIA os campos e
+integra o embed. NÃO redesenhe as seções existentes, NÃO crie página nova —
+respeite componentes, CSS Modules, cores (verde bandeira / branco / preto) e
+tipografia (Montserrat). O backend /api/init-form já existe (Fase A).
 
-ANTES DE CODAR: leia os arquivos do formulário atual e me diga qual o fluxo hoje
-(onde o submit é tratado, que estado existe, o que acontece depois do envio).
-Proponha o ponto exato de integração e espere minha confirmação.
+Campos do formulário (mínimo, ver documentos/TEMPLATE-DOCUSEAL.md §4b):
+- Nome completo — obrigatório
+- WhatsApp — obrigatório, inputMode="numeric", máscara visual (00) 00000-0000,
+  rótulo "WhatsApp" (não "telefone")
+- E-mail — OPCIONAL, rotulado como tal
+(município/área/CAR são opcionais e podem entrar em `values` se você quiser
+pré-preencher — não são obrigatórios nesta fase)
+
+ANTES DE CODAR: proponha o ponto exato de integração (provavelmente a seção
+#assinar / SignCta) e espere minha confirmação.
 
 Tarefa (após confirmação):
-1. Componente client que, após o submit do form existente, chama /api/init-form
-   e renderiza <docuseal-form data-src={embed_src}>.
+1. Componente client com o formulário acima. No submit: chama
+   POST /api/init-form com { name, phone, email? }, guarda o lead_id da resposta
+   (necessário para correlação futura) e renderiza
+   <docuseal-form data-src={embed_src}>.
 2. Carregue https://cdn.docuseal.com/js/form.js via next/script com
    strategy="lazyOnload". Não coloque no <head> global — só onde é usado.
 3. Escute o evento de conclusão do web component e mostre o estado de sucesso.
-4. Estados de erro por código HTTP:
-   400 -> mensagem de validação específica
-   429 -> "muitas tentativas, aguarde alguns minutos"
+4. Estados de erro por código/erro HTTP:
+   400 name_required/phone_required/invalid_phone/invalid_email -> mensagem no campo
+   429 -> "muitas tentativas, aguarde alguns minutos" (só depois da Fase D)
    502/500 -> mensagem genérica com botão de tentar novamente
 5. Estado de loading enquanto /api/init-form responde.
 
@@ -177,6 +161,9 @@ Tarefa:
 5. Idempotência: projete a chave de deduplicação (submitter_id + event_type) e
    deixe o ponto de gravação isolado atrás de uma interface, mas NÃO implemente
    store agora.
+6. Correlação com o lead: o /api/init-form envia external_id = lead_id (UUID) no
+   submitter. Confirme na doc/payload do webhook onde esse valor volta
+   (external_id / application_key / metadata) e logue-o junto do evento.
 
 Decisão arquitetural já tomada — não questione: nesta fase o webhook apenas
 valida, loga e responde 200. Não há persistência própria. O DocuSeal é a fonte de

@@ -106,6 +106,7 @@ Hardening aplicado: SSH só por chave, root bloqueado, fail2ban, UFW + Hetzner C
 - `external_id` é aceito e retornado; espelhado também no campo `application_key`
 - `preferences` volta com `send_email: false` e `send_sms: false`
 - O tipo de campo `Telefone` e o envio por SMS são recursos pagos. No template, telefone é campo **Texto**.
+- **Confirmado ponta a ponta pelo `/api/init-form` (Fase A):** a resposta é o array; `resposta[0].embed_src` já vem como URL completa (`https://docuseal.h06.online/s/<slug>`, slug ~14 chars alfanuméricos) e abre o formulário sem login. Não precisa construir a URL nem enviar `X-Forwarded-Proto` (a chamada Vercel→VPS é HTTPS externa normal).
 
 **Payload em uso:**
 
@@ -123,7 +124,9 @@ Hardening aplicado: SSH só por chave, root bloqueado, fail2ban, UFW + Hetzner C
 }
 ```
 
-`values.email` só é enviado se o lead informou e-mail — ausente é diferente de vazio. O telefone vai em formato brasileiro no documento (lido por humanos) e em E.164 no `metadata`.
+`values.email` só é enviado se o lead informou e-mail — ausente é diferente de vazio. Já `metadata.email` está **sempre presente** (valor real ou `null`) porque é registro interno. O telefone vai em formato brasileiro no documento (lido por humanos) e em E.164 no `metadata`.
+
+**Contrato do `/api/init-form` (Fase A):** request `{ name, phone, email?, values? }` → 200 `{ slug, embed_src, lead_id }`. `phone` obrigatório e normalizado (`src/lib/phone.js`); `email` validado só se preenchido; `lead_id` é um `randomUUID` gerado no handler e devolvido para o front correlacionar com o webhook. `values` do cliente passa por allowlist (`CAMPOS_PERMITIDOS` em `src/lib/docuseal/validate.js`) — `nome_completo` e `telefone` são montados no servidor e nunca aceitos do cliente. Erros: 400 `name_required|phone_required|invalid_phone|invalid_email|invalid_json`, 502 `upstream_error`, 500 `server_misconfigured`.
 
 **Embed:**
 ```html
@@ -143,9 +146,10 @@ Hardening aplicado: SSH só por chave, root bloqueado, fail2ban, UFW + Hetzner C
 | `DOCUSEAL_TOKEN` | Vercel + `.env.local` | token da API (Settings → API no admin) |
 | `DOCUSEAL_TEMPLATE_ID` | Vercel + `.env.local` | id numérico do template |
 | `SUBMITTER_ROLE` | Vercel + `.env.local` | role definido no template: `Manifestante` |
+| `LEAD_ORIGEM` | Vercel + `.env.local` (opcional) | rótulo gravado em `metadata.origem`. Default `lp-carbono` |
 | `WEBHOOK_SECRET` | Vercel + DocuSeal | segredo compartilhado do webhook (**falta no `.env.local` atual**; entra na Fase C) |
 
-O `.env.local` atual tem apenas `DOCUSEAL_URL`, `DOCUSEAL_TOKEN`, `DOCUSEAL_TEMPLATE_ID` e `SUBMITTER_ROLE`. `.env.example` ainda precisa ser criado (Fase A).
+`.env.example` (raiz) documenta todas essas chaves. O `.env.local` de dev tem as 4 obrigatórias preenchidas e testadas contra a instância; falta só `WEBHOOK_SECRET` (Fase C).
 
 No VPS, `/opt/docuseal/.env` (chmod 600) guarda `DOMAIN`, `ACME_EMAIL`, `POSTGRES_*` e `SECRET_KEY_BASE`. **Nunca sai do servidor.**
 
@@ -158,7 +162,8 @@ No VPS, `/opt/docuseal/.env` (chmod 600) guarda `DOMAIN`, `ACME_EMAIL`, `POSTGRE
 npm install
 npm run dev
 npm run lint
-npm run test                 # NÃO há runner ainda — script é no-op. vitest entra na Fase A
+npm run test                 # vitest run — suíte de src/lib e src/app/api
+npm run test:watch           # vitest em watch
 
 # Deploy do VPS — ./scripts/deploy.sh só existe a partir da Fase E.
 # Até lá, manual:
@@ -184,9 +189,13 @@ O alias `docuseal` existe no `~/.ssh/config` da máquina local. Comandos `git`, 
 - Estilo: CSS Modules por componente + classes utilitárias globais em `src/app/globals.css`
 - Cores primárias: **verde bandeira** e **branco**. Secundária: **preto**
 - Tipografia: **Montserrat**
+- Testes com **vitest** (`npm run test`). Testes ficam ao lado do código (`*.test.js`) e importam os globais de `vitest` explicitamente
+- Lógica testável vive em `src/lib/`; Route Handlers só fazem wiring HTTP
 - Rodar testes e lint antes de finalizar mudanças
 - Não commitar sem solicitação explícita
 - Listar objetivamente o que foi implementado e o que não foi possível implementar
+
+**Nota sobre o lint:** o preset `eslint-config-next/core-web-vitals` (flat) é frouxo — não sinaliza `no-unused-vars` nem `no-undef`. "`npm run lint` limpo" continua sendo critério, mas não substitui revisão.
 
 ---
 
@@ -219,18 +228,17 @@ A cada interação crítica ou erro detectado:
 - VPS provisionada e endurecida
 - DNS e TLS (`https://docuseal.h06.online`, HTTP/2, certificado válido)
 - DocuSeal + Postgres + Caddy rodando; migrations aplicadas; conta admin criada
-- `infra/` presente no working tree — **ainda não commitado**; deploy do VPS feito manualmente até a Fase E
+- `infra/`, swap `claude.md`→`CLAUDE.md`, `PROMPTS-FASES.md` e docs — **commitados** na branch `feat/implementação-docuseal` (commits `f659f04`, `0bd8e1f`, `277c0eb`)
 - Front-end da LP: seções estáticas prontas (Hero, AboutLetter, Founders, Faq, SignCta). **Não há formulário** — os CTAs são `<a href="#">` inertes (`SIGN_HREF = "#"` em `src/app/page.js`)
 - Template da carta de intenção montado no DocuSeal (`template_id` = 1, role `Manifestante`), testado ponta a ponta via API
+- **Fase A — `POST /api/init-form`**: Route Handler + `src/lib/phone.js`, `src/lib/mask.js`, `src/lib/docuseal/{config,validate,client}.js`. `.env.example` criado, runner vitest (73 testes). Testado com `curl` real contra a instância: 200 com `slug`/`embed_src`/`lead_id`, `embed_src` abre sem login, e-mail/telefone mascarados no log. **Não commitado.**
 
 **Pendente:**
-- Criar `.env.example` (Fase A) e configurar runner de testes (vitest)
-- `POST /api/init-form` (Route Handler) — não existe `src/app/api/` ainda
-- **Fase B cria os campos nome/e-mail no front** (não existe form hoje) + componente de embed
-- `POST /api/docuseal/webhook` + `WEBHOOK_SECRET` no `.env.local`
-- Rate limiting com store externo
-- Backups do VPS (`pg_dump` + volume de arquivos) + `scripts/`
-- Commitar a substituição `claude.md` → `CLAUDE.md` e o `infra/`
+- **Fase B** cria os campos (nome + WhatsApp + e-mail opcional) no front + componente de embed. Consome `/api/init-form`, usa `lead_id` da resposta.
+- **Fase C** — `POST /api/docuseal/webhook` + `WEBHOOK_SECRET` no `.env.local`
+- **Fase D** — rate limiting com store externo
+- **Fase E** — backups do VPS (`pg_dump` + volume) + `scripts/`
 - Corrigir copy do FAQ que promete "cópia por e-mail"
+- Commitar a Fase A (sem pedido explícito ainda)
 
 **Divergência `vite build`:** resolvida — o `CLAUDE.md` novo já usa `next build`. O `vite build` estava no `claude.md` antigo (deletado, falta commitar).

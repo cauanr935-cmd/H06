@@ -18,29 +18,16 @@
 
 .signCta p {
   margin: 0;
-  max-width: 380px;
+  max-width: 420px;
   color: var(--color-muted);
   font-size: 16px;
   line-height: 1.55;
 }
 
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.button {
-  font-size: 19px;
-  padding: 16px 34px;
-}
-
 .docLink {
   display: inline-block;
   padding: 12px 2px;
-  font-size: 16px;
+  font-size: 15px;
   color: var(--color-green);
   text-decoration: none;
   border-bottom: 1.5px solid var(--color-green);
@@ -49,11 +36,6 @@
 .docLink:hover {
   color: var(--color-green-dark);
   border-color: var(--color-green-dark);
-}
-
-.hint {
-  font-size: 13px;
-  color: var(--color-muted);
 }
 
 @media (max-width: 640px) {
@@ -68,14 +50,5 @@
 
   .signCta p {
     font-size: 15px;
-  }
-
-  .actions {
-    flex-direction: column;
-    width: 100%;
-  }
-
-  .button {
-    width: 100%;
   }
 }
