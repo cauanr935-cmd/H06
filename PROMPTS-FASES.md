@@ -159,13 +159,22 @@ incluindo o teste explícito de injeção do segredo em campos do payload.
 header + payload real de `form.completed` → 200 e log mascarado; JSON
 malformado → 400.
 
-**Não feito nesta sessão** (fora do repositório / requer infra adicional):
-- Cadastrar a URL do webhook no admin do DocuSeal (Settings → Webhooks →
-  Nova URL → `https://<APP_URL>/api/docuseal/webhook`, aba Secret com header
-  `X-Webhook-Secret` = `WEBHOOK_SECRET` de produção — eventos
-  `form.viewed/started/completed/declined` já vêm marcados por padrão).
-- Teste ponta a ponta com a instância real (precisa de túnel `ngrok` ou
-  deploy de preview, já que o dev server só existe em `localhost`).
+**Atualização (mesmo dia, após deploy na Vercel):** LP publicada em
+`https://h06.vercel.app`, env vars cadastradas lá, webhook cadastrado no
+admin do DocuSeal (`https://h06.vercel.app/api/docuseal/webhook`, header
+`X-Webhook-Secret`) e **testado ponta a ponta com o botão "Test Webhook"**
+do próprio DocuSeal — confirmado via a chave de dedupe (`webhook_seen:...`,
+ver Fase de idempotência abaixo) aparecendo no Upstash, provando que o
+evento chegou, autenticou e foi processado.
+
+**Idempotência (implementada após a Fase E, mesma sessão):**
+`checkAndMarkProcessed` em `src/lib/docuseal/webhook.js` — `SET
+webhook_seen:{submitter_id}:{event_type} 1 EX 604800 NX` no mesmo Upstash
+Redis do rate limit (Fase D). Retry do DocuSeal do mesmo evento responde
+`{ ok: true, duplicate: true }` sem reprocessar; fail-open se o Upstash
+falhar. Testado ponta a ponta contra o Upstash real (primeira entrega
+processa, reenvio é ignorado) e depois confirmado de novo com o teste real
+do DocuSeal admin.
 
 ---
 
