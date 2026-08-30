@@ -6,7 +6,7 @@ export default function Header() {
   return (
     <header className={styles.header}>
       <div className={styles.brand}>
-        <Image src={logo} alt="Hectare06" width={32} height={32} priority />
+        <Image src={logo} alt="Hectare06" width={48} height={48} priority />
         <span className={styles.name}>Hectare06</span>
       </div>
       <nav className={styles.nav}>

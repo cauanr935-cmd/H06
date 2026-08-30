@@ -7,7 +7,7 @@ export default function AboutLetter() {
       <p>
         É um documento simples em que você declara interesse em participar do
         projeto da Hectare06. Ela não vende nem compromete sua propriedade —
-        é o primeiro passo para conversarmos sobre um contrato futuro.
+        é o primeiro passo para mapearmos a intenção de possíveis clientes na nossa solução
       </p>
       <ul className={styles.checks}>
         <li>✓ não é contrato</li>
@@ -17,3 +17,4 @@ export default function AboutLetter() {
     </section>
   );
 }
+

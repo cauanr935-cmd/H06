@@ -1,0 +1,82 @@
+.founders {
+  margin: 0 auto 56px;
+  padding: 0 32px;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  text-align: center;
+}
+
+.founders h2 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 32px;
+  width: 100%;
+}
+
+.profile {
+  flex: 1 1 260px;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.photo {
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--color-border);
+}
+
+.name {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.bio {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.linkedin {
+  display: inline-block;
+  padding: 12px 2px;
+  font-size: 16px;
+  color: var(--color-green);
+  text-decoration: none;
+  border-bottom: 1.5px solid var(--color-green);
+}
+
+@media (max-width: 640px) {
+  .founders {
+    padding: 0 20px;
+    gap: 24px;
+  }
+
+  .founders h2 {
+    font-size: 24px;
+  }
+
+  .grid {
+    gap: 28px;
+  }
+
+  .photo {
+    width: 128px;
+    height: 128px;
+  }
+}

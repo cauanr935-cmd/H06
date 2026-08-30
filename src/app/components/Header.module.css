@@ -4,37 +4,56 @@
   justify-content: space-between;
   padding: 20px 32px;
   border-bottom: 1px solid var(--color-border);
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .brand img {
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .name {
   font-weight: 700;
-  font-size: 18px;
+  font-size: 22px;
 }
 
 .nav {
   display: flex;
   gap: 24px;
-  font-size: 14px;
+  font-size: 16px;
+  flex-wrap: wrap;
 }
 
 .nav a {
+  display: inline-block;
   text-decoration: none;
   color: var(--color-muted);
-  padding-bottom: 4px;
+  padding: 14px 4px 8px;
 }
 
 .navActive {
   color: var(--color-black) !important;
   border-bottom: 2px solid var(--color-green);
   font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .header {
+    padding: 16px 20px;
+  }
+
+  .name {
+    font-size: 19px;
+  }
+
+  .nav {
+    gap: 16px;
+    font-size: 15px;
+  }
 }

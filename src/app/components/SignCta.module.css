@@ -7,21 +7,21 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   text-align: center;
 }
 
 .signCta h2 {
   margin: 0;
-  font-size: 28px;
+  font-size: 30px;
 }
 
 .signCta p {
   margin: 0;
   max-width: 380px;
   color: var(--color-muted);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 16px;
+  line-height: 1.55;
 }
 
 .actions {
@@ -33,18 +33,44 @@
 }
 
 .button {
-  font-size: 17px;
-  padding: 15px 32px;
+  font-size: 19px;
+  padding: 16px 34px;
 }
 
 .docLink {
-  font-size: 14px;
+  display: inline-block;
+  padding: 12px 2px;
+  font-size: 16px;
   color: var(--color-green);
   text-decoration: none;
   border-bottom: 1.5px solid var(--color-green);
 }
 
 .hint {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--color-muted);
+}
+
+@media (max-width: 640px) {
+  .signCta {
+    margin: 0 20px 40px;
+    padding: 24px 20px;
+  }
+
+  .signCta h2 {
+    font-size: 24px;
+  }
+
+  .signCta p {
+    font-size: 15px;
+  }
+
+  .actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .button {
+    width: 100%;
+  }
 }

@@ -6,18 +6,19 @@
   background: var(--color-surface);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .about h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: 24px;
 }
 
 .about p {
   margin: 0;
   color: var(--color-muted);
-  line-height: 1.5;
+  line-height: 1.55;
+  font-size: 17px;
   max-width: 640px;
 }
 
@@ -28,7 +29,22 @@
   gap: 16px;
   margin: 0;
   padding: 0;
-  font-size: 14px;
+  font-size: 15px;
   color: var(--color-green);
   font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .about {
+    margin: 0 20px 28px;
+    padding: 20px;
+  }
+
+  .about h2 {
+    font-size: 21px;
+  }
+
+  .about p {
+    font-size: 16px;
+  }
 }
