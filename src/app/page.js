@@ -5,8 +5,8 @@ import Founders from "./components/Founders";
 import Faq from "./components/Faq";
 import SignCta from "./components/SignCta";
 
-// TODO: substituir pela URL real da plataforma de assinatura (ex.: Autentique, DocuSign) quando integrada.
-const SIGN_HREF = "#";
+// Âncora para a seção de assinatura (o fluxo vive em <SignCta />).
+const SIGN_HREF = "#assinar";
 
 export default function Home() {
   return (
@@ -16,7 +16,7 @@ export default function Home() {
       <AboutLetter />
       <Founders />
       <Faq />
-      <SignCta signHref={SIGN_HREF} />
+      <SignCta />
     </main>
   );
 }

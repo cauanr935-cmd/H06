@@ -1,0 +1,17 @@
+.wrap {
+  width: 100%;
+  min-height: 420px;
+}
+
+.loading {
+  margin: 0;
+  padding: 24px 0;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 15px;
+}
+
+.wrap docuseal-form {
+  display: block;
+  width: 100%;
+}

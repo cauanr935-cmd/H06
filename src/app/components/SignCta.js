@@ -1,30 +1,23 @@
 import styles from "./SignCta.module.css";
+import SignFlow from "./SignFlow";
 
-export default function SignCta({ signHref }) {
+export default function SignCta() {
   return (
     <section className={styles.signCta} id="assinar">
       <h2>Pronto para assinar?</h2>
       <p>
-        Você será direcionado à plataforma de assinatura para concluir o
-        processo.
+        Preencha os dados abaixo e assine a carta de intenção aqui mesmo. Sem
+        cadastro, sem custo — o PDF assinado fica disponível para download na hora.
       </p>
-      <div className={styles.actions}>
-        <a
-          href={signHref}
-          className={`button button--primary ${styles.button}`}
-        >
-          Assinar carta de intenção ↗
-        </a>
-        <a
-          href="/carta-de-intencao.pdf"
-          target="_blank"
-          rel="noopener noreferrer"
-          className={styles.docLink}
-        >
-          Ler o documento (PDF)
-        </a>
-      </div>
-      <span className={styles.hint}>link externo · API de assinatura</span>
+      <SignFlow />
+      <a
+        href="/carta-de-intencao.pdf"
+        target="_blank"
+        rel="noopener noreferrer"
+        className={styles.docLink}
+      >
+        Ler o documento antes (PDF)
+      </a>
     </section>
   );
 }
