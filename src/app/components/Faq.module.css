@@ -41,12 +41,37 @@
   padding: 18px;
   font-size: 17px;
   text-align: left;
+  transition: background-color 0.2s ease;
+}
+
+.question:hover {
+  background: var(--color-surface);
 }
 
 .icon {
   font-weight: 700;
   color: var(--color-muted);
   font-size: 18px;
+  transition: transform 0.25s ease;
+}
+
+.iconOpen {
+  transform: rotate(45deg);
+  color: var(--color-green);
+}
+
+.answerWrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s ease;
+}
+
+.answerOpen {
+  grid-template-rows: 1fr;
+}
+
+.answerInner {
+  overflow: hidden;
 }
 
 .answer {

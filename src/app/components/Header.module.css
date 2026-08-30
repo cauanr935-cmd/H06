@@ -16,6 +16,11 @@
 
 .brand img {
   border-radius: 8px;
+  transition: transform 0.2s ease;
+}
+
+.brand:hover img {
+  transform: scale(1.05);
 }
 
 .name {
@@ -35,11 +40,16 @@
   text-decoration: none;
   color: var(--color-muted);
   padding: 14px 4px 8px;
+  border-bottom: 2px solid transparent;
+}
+
+.nav a:hover {
+  color: var(--color-black);
 }
 
 .navActive {
   color: var(--color-black) !important;
-  border-bottom: 2px solid var(--color-green);
+  border-bottom-color: var(--color-green);
   font-weight: 600;
 }
 

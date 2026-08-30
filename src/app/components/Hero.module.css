@@ -38,6 +38,11 @@
   border-bottom: 1.5px solid var(--color-green);
 }
 
+.secondary:hover {
+  color: var(--color-green-dark);
+  border-color: var(--color-green-dark);
+}
+
 @media (max-width: 640px) {
   .hero {
     padding: 36px 20px 28px;

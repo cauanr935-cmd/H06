@@ -46,6 +46,11 @@
   border-bottom: 1.5px solid var(--color-green);
 }
 
+.docLink:hover {
+  color: var(--color-green-dark);
+  border-color: var(--color-green-dark);
+}
+
 .hint {
   font-size: 13px;
   color: var(--color-muted);

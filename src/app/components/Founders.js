@@ -5,7 +5,7 @@ const FOUNDERS = [
   {
     name: "Bruno",
     photo: "/bruno.png",
-    bio: "Sou estudante de ciência da computação, já realizei projetos com o BTG Pactual, Nvidia e a Traction.",
+    bio: "Sou estudante de ciência da computação e já realizei projetos com o BTG Pactual, Nvidia e a Tractian.",
     linkedin: "https://www.linkedin.com/in/bruno-nascimento-ara%C3%BAjo",
   },
   {

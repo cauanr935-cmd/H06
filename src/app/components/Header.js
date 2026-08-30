@@ -1,5 +1,5 @@
 import Image from "next/image";
-import logo from "../../../public/logoH06.png";
+import logo from "../../../public/Hectare06.png";
 import styles from "./Header.module.css";
 
 export default function Header() {

@@ -43,9 +43,19 @@ export default function Faq() {
                 aria-expanded={isOpen}
               >
                 <span>{item.question}</span>
-                <span className={styles.icon}>{isOpen ? "−" : "+"}</span>
+                <span className={`${styles.icon} ${isOpen ? styles.iconOpen : ""}`}>
+                  +
+                </span>
               </button>
-              {isOpen && <p className={styles.answer}>{item.answer}</p>}
+              <div
+                className={`${styles.answerWrap} ${
+                  isOpen ? styles.answerOpen : ""
+                }`}
+              >
+                <div className={styles.answerInner}>
+                  <p className={styles.answer}>{item.answer}</p>
+                </div>
+              </div>
             </div>
           );
         })}
