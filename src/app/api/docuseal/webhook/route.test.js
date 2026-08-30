@@ -127,3 +127,59 @@ describe("POST /api/docuseal/webhook", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 });
+
+describe("POST /api/docuseal/webhook — idempotência (Upstash configurado)", () => {
+  const UPSTASH_ENV = { UPSTASH_REDIS_REST_URL: "https://fake-upstash", UPSTASH_REDIS_REST_TOKEN: "tok_rl" };
+
+  function fakeUpstashSet() {
+    const seen = new Set();
+    return vi.fn(async (url) => {
+      const key = decodeURIComponent(url.split("/set/")[1].split("/1/EX/")[0]);
+      if (seen.has(key)) return { ok: true, json: async () => ({ result: null }) };
+      seen.add(key);
+      return { ok: true, json: async () => ({ result: "OK" }) };
+    });
+  }
+
+  it("primeira entrega processa normalmente; reenvio do mesmo evento é ignorado", async () => {
+    vi.stubEnv("WEBHOOK_SECRET", SECRET);
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", UPSTASH_ENV.UPSTASH_REDIS_REST_URL);
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", UPSTASH_ENV.UPSTASH_REDIS_REST_TOKEN);
+    vi.stubGlobal("fetch", fakeUpstashSet());
+
+    const first = await POST(req(FORM_COMPLETED, authHeaders()));
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({ ok: true });
+    expect(console.log).toHaveBeenCalledWith("[docuseal-webhook] evento recebido", expect.anything());
+
+    console.log.mockClear();
+
+    const retry = await POST(req(FORM_COMPLETED, authHeaders()));
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({ ok: true, duplicate: true });
+    expect(console.log).not.toHaveBeenCalledWith("[docuseal-webhook] evento recebido", expect.anything());
+  });
+
+  it("eventos com submitter_id ou event_type diferentes não colidem", async () => {
+    vi.stubEnv("WEBHOOK_SECRET", SECRET);
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", UPSTASH_ENV.UPSTASH_REDIS_REST_URL);
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", UPSTASH_ENV.UPSTASH_REDIS_REST_TOKEN);
+    vi.stubGlobal("fetch", fakeUpstashSet());
+
+    await POST(req(FORM_COMPLETED, authHeaders()));
+    const outroSubmitter = { ...FORM_COMPLETED, data: { ...FORM_COMPLETED.data, id: 99 } };
+    const res = await POST(req(outroSubmitter, authHeaders()));
+    expect(await res.json()).toEqual({ ok: true });
+  });
+
+  it("falha do Upstash na checagem de idempotência não bloqueia o webhook (fail-open)", async () => {
+    vi.stubEnv("WEBHOOK_SECRET", SECRET);
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", UPSTASH_ENV.UPSTASH_REDIS_REST_URL);
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", UPSTASH_ENV.UPSTASH_REDIS_REST_TOKEN);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+
+    const res = await POST(req(FORM_COMPLETED, authHeaders()));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+  });
+});

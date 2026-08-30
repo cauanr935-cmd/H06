@@ -220,12 +220,24 @@ Fonte primária (branch `master` do `docusealco/docuseal`):
 - **`POST /api/docuseal/webhook` (Fase C)**: valida o header
   `X-Webhook-Secret` (`timingSafeEqual`, trata tamanho/ausência sem lançar),
   loga `{ event_type, submitter_id, submission_id, lead_id, status,
-  email/phone mascarados }`, responde 200. **Sem persistência própria** —
-  arquitetura decidida: o DocuSeal é a fonte de verdade dos documentos,
-  administradores consultam pelo admin dele. Idempotência real (dedupe por
-  `submitter_id + event_type`) fica desenhada mas não implementada — entra
-  na Fase D com um store externo (regra #9: serverless na Vercel é
-  stateless).
+  email/phone mascarados }`, responde 200. Sem persistência própria além do
+  marcador de dedupe abaixo — arquitetura decidida: o DocuSeal é a fonte de
+  verdade dos documentos, administradores consultam pelo admin dele.
+- **Idempotência do webhook (implementada após a Fase E)**:
+  `checkAndMarkProcessed` em `src/lib/docuseal/webhook.js` usa
+  `SET webhook_seen:{submitter_id}:{event_type} 1 EX 604800 NX` no mesmo
+  Upstash Redis do rate limit (Fase D) — atômico (sem race condition entre
+  checar e marcar), TTL de 7 dias (cobre a janela de retry do DocuSeal,
+  que tenta reentregar com backoff exponencial por até ~48-68h). Se a
+  chave já existir (retry de um evento já processado), a rota responde
+  `{ ok: true, duplicate: true }` sem repetir o log/processamento. Mesmo
+  padrão fail-open das outras integrações com o Upstash: falha do store
+  não bloqueia o webhook, só processa como se fosse novo. Reaproveita
+  `readRateLimitConfig` de `src/lib/rate-limit.js` — não é um store
+  dedicado ao webhook, é a mesma instância Upstash servindo os dois
+  propósitos. **Testado ponta a ponta contra o Upstash real**: primeira
+  entrega processa normal, reenvio do mesmo evento retorna `duplicate:
+  true` sem reprocessar.
 
 **Rate limiting (Fase D) — "Vercel KV" não existe mais, confirmado.**
 Fonte primária (`vercel.com/docs/redis`, changelog "Upstash joins the
@@ -378,14 +390,13 @@ Cloud e OSS sem distinguir.
 - **Fase C — `POST /api/docuseal/webhook`**: `src/lib/docuseal/webhook.js` (`verifySecret` com `timingSafeEqual`, `parseEvent`, `redactSecret`) + `readWebhookConfig` em `src/lib/docuseal/config.js` (independente de `readConfig`, para não acoplar `/api/init-form` a `WEBHOOK_SECRET`). Rota valida o header `X-Webhook-Secret`, loga `{ event_type, submitter_id, submission_id, lead_id, status }` com e-mail/telefone mascarados, responde 200. Sem persistência própria (decisão arquitetural mantida). `WEBHOOK_SECRET` nova env. Testado via `curl` local (401 sem header/header errado, 200 com payload real de `form.completed`, 400 em JSON malformado). Falta configurar a URL do webhook no admin do DocuSeal (ação manual fora do repo) e testar ponta a ponta com a instância real (precisa de túnel/deploy — não feito nesta sessão).
 - **Fase D — Rate limiting**: `src/lib/rate-limit.js` (`readRateLimitConfig`, `getClientIp`, `checkRateLimit` — janela fixa de 5 req/IP/10min direto contra a REST API do Upstash, sem SDK) integrado em `/api/init-form` como primeiro passo do handler, antes de `readConfig()`. 429 com `Retry-After` quando excede; fail-open (loga e libera) tanto se o Upstash falhar em runtime quanto se `UPSTASH_REDIS_REST_URL`/`TOKEN` estiverem ausentes. `json()` do route ganhou um terceiro parâmetro para headers extras. Conta Upstash provisionada via Vercel Marketplace (env vars `KV_REST_API_URL`/`KV_REST_API_TOKEN` — nomenclatura antiga da integração, mapeadas para `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` no `.env.local`). **Testado ponta a ponta contra a instância Upstash real**: 5 requisições da mesma IP → 200, a 6ª → 429 com `retry-after: 589` e corpo `{"error":"too_many_requests"}`. Submissions de teste criadas no DocuSeal durante a verificação foram arquivadas depois.
 
-- **Fase E — Backups do VPS**: `scripts/backup.sh` (`pg_dump -Fc` do Postgres via `docker compose exec`, `tar.gz` do volume `docuseal_app_data` via container efêmero, verificação de integridade com `pg_restore --list`, aborta se `<5GB` livres, retenção local de 7 dias, `set -euo pipefail` com `trap` que limpa artefatos parciais em falha) + `scripts/restore.sh` (caminho inverso, destrutivo, exige digitar `restaurar` — nunca roda sem confirmação interativa) + `scripts/systemd/docuseal-backup.{service,timer}` (`OnCalendar=*-*-* 03:00:00 America/Sao_Paulo`, `Persistent=true`) + `scripts/deploy.sh` (novo — sincroniza `infra/` e `scripts/` pro VPS, sem `--delete`). **Tudo testado de verdade no VPS**: `backup.sh` rodado duas vezes seguidas (sem corromper nada), `pg_restore --list` confirmado com 473 TOC entries reais, timer instalado e disparado manualmente via `systemctl start` com `status=0/SUCCESS`, `systemctl list-timers` mostrando o próximo disparo. `restore.sh` **não foi rodado contra dados reais** (destrutivo por design) — validado só por `bash -n`/`shellcheck` (limpo) e revisão lógica. Bloqueio resolvido nesta sessão: `~/.ssh/config` desta máquina não tinha o alias `docuseal` — usuário autorizou a chave local em `deploy@docuseal.h06.online`.
+- **Fase E — Backups do VPS**: `scripts/backup.sh` (`pg_dump -Fc` do Postgres via `docker compose exec`, `tar.gz` do volume `docuseal_app_data` via container efêmero, verificação de integridade com `pg_restore --list`, aborta se `<5GB` livres, retenção local de 7 dias, `set -euo pipefail` com `trap` que limpa artefatos parciais em falha) + `scripts/restore.sh` (caminho inverso, destrutivo, exige digitar `restaurar` — nunca roda sem confirmação interativa) + `scripts/systemd/docuseal-backup.{service,timer}` (`OnCalendar=*-*-* 03:00:00 America/Sao_Paulo`, `Persistent=true`) + `scripts/deploy.sh` (novo — sincroniza `infra/` e `scripts/` pro VPS, sem `--delete`). **Tudo testado de verdade no VPS**: `backup.sh` rodado duas vezes seguidas (sem corromper nada), `pg_restore --list` confirmado com 473 TOC entries reais, timer instalado e disparado manualmente via `systemctl start` com `status=0/SUCCESS`, `systemctl list-timers` mostrando o próximo disparo. `restore.sh` como script inteiro **não foi rodado contra `docuseal`/`docuseal_app_data` reais** (destrutivo por design) — mas as duas partes que ele encadeia foram validadas isoladamente contra alvos descartáveis: `createdb`+`pg_restore` do dump real num banco de teste (`docuseal_restore_test`, 45 tabelas, dados reais restaurados — 1 template, 13 submitters — depois `dropdb`) e `tar xzf` do `app_data` real num volume Docker descartável (`restore_test_data`, 12 arquivos/916K, idêntico ao volume real — depois `docker volume rm`). Produção nunca foi tocada (containers com o mesmo uptime antes/depois). Bloqueio resolvido nesta sessão: `~/.ssh/config` desta máquina não tinha o alias `docuseal` — usuário autorizou a chave local em `deploy@docuseal.h06.online`.
 
 **Pendente:**
+- Fases A-E commitadas (`b8466e2`) mas **não empurradas** — `git push origin main` precisa rodar de uma máquina com credencial do GitHub configurada (esta sessão não tem `gh` nem credencial HTTPS). A idempotência do webhook (acima) foi implementada depois desse commit, ainda sem commit próprio
 - Configurar a URL do webhook no admin do DocuSeal (Settings → Webhooks) e validar ponta a ponta com um documento real assinado
 - Cadastrar `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` nas Environment Variables da Vercel (produção/preview) — já estão em `.env.local` e verificadas, mas a Vercel precisa das suas próprias (a integração via Marketplace deve injetar automaticamente se conectada ao projeto lá)
-- Idempotência real do webhook (dedupe por `submitter_id + event_type`), agora que existe um store externo (Upstash) disponível para isso
-- Backup off-site (Cloudflare R2) — só o plano existe (ver `PROMPTS-FASES.md`, fechamento da Fase E), não implementado
-- Teste real de `restore.sh` contra dados reais (precisa de janela de manutenção dedicada ou ambiente descartável)
-- Commitar as Fases A, B, C, D e E (sem pedido explícito ainda)
+- Backup off-site (Cloudflare R2) — só o plano existe (ver `PROMPTS-FASES.md`, fechamento da Fase E), não implementado. Depende de você criar o bucket + API token no Cloudflare primeiro
+- Teste real de `restore.sh` **contra `docuseal`/`docuseal_app_data` de verdade** (com o site fora do ar) ainda não foi feito — só numa janela de manutenção dedicada, se/quando você quiser essa garantia final
 
 **Divergência `vite build`:** resolvida — o `CLAUDE.md` novo já usa `next build`. O `vite build` estava no `claude.md` antigo (deletado, falta commitar).

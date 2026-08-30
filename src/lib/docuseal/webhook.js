@@ -74,3 +74,34 @@ export function redactSecret(fields, secret) {
   }
   return out;
 }
+
+/**
+ * Idempotência: DocuSeal reenvia o mesmo evento em caso de falha na entrega
+ * (retry com backoff exponencial). Usa `SET key 1 EX ttl NX` no mesmo
+ * Upstash Redis do rate limit (`SET ... NX` só grava se a chave não existe
+ * — atômico, sem race condition entre checar e marcar). Falha do store
+ * nunca bloqueia o webhook: fail-open, processa como se fosse novo.
+ *
+ * @param {{ fetch: typeof fetch, url: string, token: string }} deps
+ * @param {{ key: string, ttlSeconds?: number }} input
+ * @returns {Promise<{ alreadyProcessed: boolean }>}
+ */
+export async function checkAndMarkProcessed(deps, { key, ttlSeconds = 7 * 24 * 60 * 60 }) {
+  const { fetch: fetchImpl, url, token } = deps;
+
+  try {
+    const res = await fetchImpl(`${url}/set/${encodeURIComponent(key)}/1/EX/${ttlSeconds}/NX`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`set http ${res.status}`);
+    const { result } = await res.json();
+    return { alreadyProcessed: result === null };
+  } catch (err) {
+    console.error("[docuseal-webhook] falha ao checar idempotência, processando mesmo assim:", {
+      key,
+      reason: err?.message,
+    });
+    return { alreadyProcessed: false };
+  }
+}

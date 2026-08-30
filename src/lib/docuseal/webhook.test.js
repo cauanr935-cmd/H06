@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-import { verifySecret, parseEvent, redactSecret } from "./webhook.js";
+import { verifySecret, parseEvent, redactSecret, checkAndMarkProcessed } from "./webhook.js";
 
 describe("verifySecret", () => {
   it("aceita quando os segredos são iguais", () => {
@@ -96,5 +96,48 @@ describe("redactSecret", () => {
   it("compara por igualdade de string (número que coincide com o segredo também é redigido)", () => {
     const out = redactSecret({ submission_id: 123 }, "123");
     expect(out.submission_id).toBe("(redigido)");
+  });
+});
+
+describe("checkAndMarkProcessed", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  const DEPS = (fetchImpl) => ({ fetch: fetchImpl, url: "https://fake-upstash", token: "tok" });
+
+  it("primeira vez: SET NX grava e retorna alreadyProcessed=false", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ result: "OK" }) });
+    const res = await checkAndMarkProcessed(DEPS(fetchMock), { key: "webhook_seen:1:form.completed" });
+    expect(res).toEqual({ alreadyProcessed: false });
+
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://fake-upstash/set/webhook_seen%3A1%3Aform.completed/1/EX/604800/NX");
+    expect(opts.headers.Authorization).toBe("Bearer tok");
+  });
+
+  it("segunda vez (chave já existe): SET NX não grava (result null), alreadyProcessed=true", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ result: null }) });
+    const res = await checkAndMarkProcessed(DEPS(fetchMock), { key: "webhook_seen:1:form.completed" });
+    expect(res).toEqual({ alreadyProcessed: true });
+  });
+
+  it("aceita ttlSeconds customizado", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ result: "OK" }) });
+    await checkAndMarkProcessed(DEPS(fetchMock), { key: "k", ttlSeconds: 60 });
+    expect(fetchMock.mock.calls[0][0]).toContain("/EX/60/NX");
+  });
+
+  it("fail-open: fetch rejeita → alreadyProcessed=false, sem lançar, erro logado", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("network down"));
+    const res = await checkAndMarkProcessed(DEPS(fetchMock), { key: "k" });
+    expect(res).toEqual({ alreadyProcessed: false });
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it("fail-open: HTTP não-2xx → alreadyProcessed=false, sem lançar", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
+    const res = await checkAndMarkProcessed(DEPS(fetchMock), { key: "k" });
+    expect(res).toEqual({ alreadyProcessed: false });
   });
 });
