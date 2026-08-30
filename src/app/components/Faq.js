@@ -22,7 +22,7 @@ const QUESTIONS = [
   {
     question: "Como recebo minha via assinada?",
     answer:
-      "Depois de assinar, você recebe uma cópia por e-mail para guardar com você.",
+      "Depois de assinar, o PDF assinado fica disponível para download na própria tela — não enviamos por e-mail.",
   },
 ];
 

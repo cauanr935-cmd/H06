@@ -1,0 +1,9 @@
+[Unit]
+Description=Roda o backup do DocuSeal diariamente às 03:00 (America/Sao_Paulo)
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 America/Sao_Paulo
+Persistent=true
+
+[Install]
+WantedBy=timers.target

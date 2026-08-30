@@ -20,7 +20,7 @@ export class UpstreamError extends Error {
 /**
  * @param {{ nome_completo: string } & Record<string, string>} values
  */
-function buildPayload({ templateId, role, origem }, input) {
+function buildPayload({ templateId, role, origem, appUrl }, input) {
   const { name, phoneE164, phoneDisplay, email, leadId, extraValues } = input;
 
   const values = {
@@ -41,6 +41,7 @@ function buildPayload({ templateId, role, origem }, input) {
         name,
         role,
         external_id: leadId,
+        completed_redirect_url: `${appUrl}/obrigado?lead_id=${leadId}`,
         metadata: {
           telefone_e164: phoneE164,
           email: email ?? null,
@@ -63,7 +64,7 @@ function firstSubmitter(body) {
  * Cria a submission e devolve o formulário de assinatura do primeiro submitter.
  *
  * @param {{ fetch: typeof fetch, baseUrl: string, token: string, templateId: string,
- *           role: string, origem: string, timeoutMs?: number }} deps
+ *           role: string, origem: string, appUrl: string, timeoutMs?: number }} deps
  * @param {{ name: string, phoneE164: string, phoneDisplay: string, email: string | null,
  *           leadId: string, extraValues?: Record<string, string> }} input
  * @returns {Promise<{ slug: string, embed_src: string }>}

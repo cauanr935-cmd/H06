@@ -6,8 +6,9 @@ export default function SignCta() {
     <section className={styles.signCta} id="assinar">
       <h2>Pronto para assinar?</h2>
       <p>
-        Preencha os dados abaixo e assine a carta de intenção aqui mesmo. Sem
-        cadastro, sem custo — o PDF assinado fica disponível para download na hora.
+        Você preenche aqui, assina na plataforma segura do DocuSeal e volta
+        para esta página. Sem cadastro, sem custo — o PDF assinado fica
+        disponível para download na hora.
       </p>
       <SignFlow />
       <a

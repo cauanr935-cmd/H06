@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { toE164BR, maskInputBR } from "../../lib/phone.js";
 import { submitLead, mensagemDeErro } from "../../lib/init-form-client.js";
-import DocusealEmbed from "./DocusealEmbed.js";
 import styles from "./SignFlow.module.css";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -36,19 +35,10 @@ function validar(campos) {
 }
 
 export default function SignFlow() {
-  const [phase, setPhase] = useState("form"); // form | loading | signing | done
+  const [phase, setPhase] = useState("form"); // form | loading
   const [campos, setCampos] = useState(CAMPOS_INICIAIS);
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState(null);
-  const [result, setResult] = useState(null);
-
-  const embedRef = useRef(null);
-  const doneRef = useRef(null);
-
-  useEffect(() => {
-    if (phase === "signing") embedRef.current?.focus();
-    if (phase === "done") doneRef.current?.focus();
-  }, [phase]);
 
   function setCampo(nome, valor) {
     setCampos((c) => ({ ...c, [nome]: valor }));
@@ -62,6 +52,7 @@ export default function SignFlow() {
 
   async function enviar(evento) {
     evento.preventDefault();
+    if (phase === "loading") return;
     setFormError(null);
 
     const errors = validar(campos);
@@ -85,8 +76,7 @@ export default function SignFlow() {
     });
 
     if (res.ok) {
-      setResult(res.data);
-      setPhase("signing");
+      window.location.assign(res.data.embed_src);
       return;
     }
 
@@ -98,28 +88,6 @@ export default function SignFlow() {
     } else {
       setFormError(msg.texto);
     }
-  }
-
-  if (phase === "signing" || phase === "done") {
-    return (
-      <div className={styles.flow}>
-        {phase === "done" && (
-          <div className={styles.sucesso}>
-            <h3 ref={doneRef} tabIndex={-1}>
-              Carta de intenção assinada ✓
-            </h3>
-            <p>Use o botão de download acima para salvar o PDF assinado.</p>
-          </div>
-        )}
-        <div ref={embedRef} tabIndex={-1} className={styles.embed} aria-label="Formulário de assinatura">
-          <DocusealEmbed
-            src={result.embed_src}
-            onCompleted={() => setPhase("done")}
-            onDeclined={() => setPhase("done")}
-          />
-        </div>
-      </div>
-    );
   }
 
   const carregando = phase === "loading";

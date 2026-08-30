@@ -7,10 +7,11 @@ const FULL = {
   DOCUSEAL_TOKEN: "tok_abc",
   DOCUSEAL_TEMPLATE_ID: "1",
   SUBMITTER_ROLE: "Manifestante",
+  APP_URL: "https://lp.example/",
 };
 
 describe("readConfig", () => {
-  it("aceita ambiente completo e remove a barra final da URL", () => {
+  it("aceita ambiente completo e remove a barra final das URLs", () => {
     const res = readConfig(FULL);
     expect(res.ok).toBe(true);
     expect(res.config).toMatchObject({
@@ -19,6 +20,7 @@ describe("readConfig", () => {
       templateId: "1",
       role: "Manifestante",
       origem: "lp-carbono",
+      appUrl: "https://lp.example",
     });
   });
 

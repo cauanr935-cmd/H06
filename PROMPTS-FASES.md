@@ -79,198 +79,244 @@ Verificado com `curl` real contra a instância: 200 com `slug`/`embed_src`/`lead
 
 ---
 
-## Fase B — Formulário + embed no front
+## Fase B — Formulário + redirect para o DocuSeal ✅ IMPLEMENTADA (revisada)
 
-```
-Contexto: NÃO existe formulário no front hoje. As seções (Hero, SignCta) só têm
-<a href="#"> inertes (SIGN_HREF em src/app/page.js). Esta fase CRIA os campos e
-integra o embed. NÃO redesenhe as seções existentes, NÃO crie página nova —
-respeite componentes, CSS Modules, cores (verde bandeira / branco / preto) e
-tipografia (Montserrat). O backend /api/init-form já existe (Fase A).
+> Feito em 30/08/2026. A abordagem original (embed via `<docuseal-form>`) foi
+> **descartada** — evidência de fonte primária (branch `master` do
+> `docusealco/docuseal`): o web component do CDN é gated no OSS self-hosted
+> (`embed_scripts_controller.rb` serve um `DUMMY_SCRIPT` "Upgrade to Pro"; não
+> existe rota `embed/forms`; `POST /embed/forms` responde 404). Ver
+> "API do DocuSeal — fatos verificados" no CLAUDE.md para o trace completo.
 
-Campos do formulário (mínimo, ver documentos/TEMPLATE-DOCUSEAL.md §4b):
-- Nome completo — obrigatório
-- WhatsApp — obrigatório, inputMode="numeric", máscara visual (00) 00000-0000,
-  rótulo "WhatsApp" (não "telefone")
-- E-mail — OPCIONAL, rotulado como tal
-(município/área/CAR são opcionais e podem entrar em `values` se você quiser
-pré-preencher — não são obrigatórios nesta fase)
+**Decisão: redirect, não embed.** A LP redireciona o usuário (mesma aba) para o
+`embed_src` retornado por `POST /api/submissions`; o DocuSeal traz o usuário de
+volta via `completed_redirect_url` (funciona no OSS — trace de 4 etapas
+verificado, ver CLAUDE.md). Trade-off aceito: o usuário sai da LP durante a
+assinatura, mas evita mexer no Caddy (`X-Frame-Options`/clickjacking) e melhora
+a experiência mobile (tela cheia) e a confiança (cadeado do domínio DocuSeal
+visível ao assinar com CPF).
 
-ANTES DE CODAR: proponha o ponto exato de integração (provavelmente a seção
-#assinar / SignCta) e espere minha confirmação.
+**O que foi feito:**
+1. `src/lib/docuseal/config.js` — `APP_URL` obrigatória, `readConfig` retorna
+   `config.appUrl` (sem barra final).
+2. `src/lib/docuseal/client.js` — `buildPayload` inclui
+   `completed_redirect_url: \`${appUrl}/obrigado?lead_id=${leadId}\`` no
+   submitter.
+3. `src/app/components/SignFlow.js` — removido o embed (`DocusealEmbed.js`,
+   deletado); fluxo agora é `form -> loading -> window.location.assign(embed_src)`.
+   Guarda de duplo submit (`phase === "loading"` + botão `disabled`).
+4. `src/app/obrigado/page.js` (novo) — página neutra de conclusão, lê
+   `lead_id` da query string. Não afirma que o documento foi assinado (isso
+   será confirmado pelo webhook, Fase C).
+5. Copy corrigida: `SignCta.js` (deixa claro que a assinatura acontece em
+   outra tela) e `Faq.js` (item sobre "receber via assinada" não promete mais
+   e-mail — regra #11 do CLAUDE.md).
+6. `.env.example`/`.env.local` ganharam `APP_URL`.
 
-Tarefa (após confirmação):
-1. Componente client com o formulário acima. No submit: chama
-   POST /api/init-form com { name, phone, email? }, guarda o lead_id da resposta
-   (necessário para correlação futura) e renderiza
-   <docuseal-form data-src={embed_src}>.
-2. Carregue https://cdn.docuseal.com/js/form.js via next/script com
-   strategy="lazyOnload". Não coloque no <head> global — só onde é usado.
-3. Escute o evento de conclusão do web component e mostre o estado de sucesso.
-4. Estados de erro por código/erro HTTP:
-   400 name_required/phone_required/invalid_phone/invalid_email -> mensagem no campo
-   429 -> "muitas tentativas, aguarde alguns minutos" (só depois da Fase D)
-   502/500 -> mensagem genérica com botão de tentar novamente
-5. Estado de loading enquanto /api/init-form responde.
+**Testes:** `config.test.js`, `client.test.js`, `route.test.js` cobrem
+`APP_URL` ausente (500), `completed_redirect_url` no payload com o `lead_id`
+gerado, e barra final normalizada. Duplo clique verificado manualmente (não
+por teste unitário — evita `@testing-library/react` como dependência nova).
 
-ANTES DE CODAR O PASSO 3: confirme na documentação oficial do DocuSeal o nome
-exato do evento de conclusão e a forma correta de escutá-lo no web component.
-Não presuma pelo nome. Me diga o que encontrou.
-
-Restrições:
-- Nenhum token ou variável sensível no client
-- Sem biblioteca nova sem me perguntar antes
-- Acessibilidade: mensagens de erro associadas ao campo, foco gerenciado na
-  transição para o iframe
-
-Critérios de aceite:
-- npm run lint limpo, suíte da Fase A continua passando
-- Fluxo completo funciona em npm run dev: preencher -> iframe carrega -> assinar
-  -> tela de sucesso
-- View-source e aba Network não expõem token
-- O documento assinado aparece no admin do DocuSeal
-
-Ponto de atenção: o iframe é cross-origin (LP na Vercel, DocuSeal em
-docuseal.h06.online). Se vier em branco, abra o console do browser. Se houver erro
-de X-Frame-Options ou frame-ancestors, a correção é um header
-Content-Security-Policy no infra/caddy/Caddyfile autorizando o domínio da LP —
-me avise antes de alterar a infra.
-```
+Nenhuma mudança em `infra/`.
 
 ---
 
-## Fase C — Webhook de conclusão
+## Fase C — Webhook de conclusão ✅ IMPLEMENTADA
 
-```
-Contexto: não dá para confiar no evento JS do browser para saber que a assinatura
-foi concluída — o usuário pode fechar a aba antes. O DocuSeal envia webhooks
-configurados em Settings -> Webhooks.
+> Feito em 30/08/2026. Pesquisa de fonte primária (branch `master` do
+> `docusealco/docuseal`) confirmou: webhooks são recurso OSS nativo (sem
+> guard de `multitenant?`/Cloud em `routes.rb`/`ability.rb`), com dois
+> mecanismos de auth possíveis (header customizado ou HMAC nativo via
+> `X-Docuseal-Signature`). **Decisão do usuário: header customizado +
+> `crypto.timingSafeEqual`**, exatamente como este prompt original desenhou.
+> Ver "Webhooks — fatos verificados" no CLAUDE.md para eventos, payload e
+> correlação com o lead confirmados no código-fonte.
 
-ANTES DE CODAR: consulte a documentação atual do DocuSeal sobre webhooks e
-confirme os nomes exatos dos eventos e o formato do payload. Me diga o que
-encontrou antes de implementar.
+**O que foi feito:**
+1. `src/app/api/docuseal/webhook/route.js` — `runtime nodejs`,
+   `dynamic force-dynamic`. Valida `X-Webhook-Secret` **antes** de ler o
+   corpo; ausente/errado/tamanho diferente → 401, sem lançar exceção.
+2. `src/lib/docuseal/webhook.js` — `verifySecret` (timingSafeEqual seguro),
+   `parseEvent` (parsing defensivo do envelope `{event_type, data}`, nunca
+   lança em campo ausente), `redactSecret` (substitui qualquer campo do log
+   cujo valor bata exatamente com o segredo — cobre o caso de payload
+   malicioso/mal-formado injetando o segredo em `status`/`event_type`).
+3. `readWebhookConfig` em `src/lib/docuseal/config.js` — independente de
+   `readConfig`, para `/api/init-form` não quebrar se só `WEBHOOK_SECRET`
+   estiver faltando.
+4. Log estruturado: `{ event_type, submitter_id, submission_id, lead_id,
+   status, email/phone mascarados }`. `lead_id` vem de `data.external_id`
+   (mesmo valor enviado pelo `/api/init-form` na criação da submission).
+5. Sem persistência própria (decisão arquitetural mantida) — só valida, loga
+   e responde 200 `{ ok: true }`.
 
-Tarefa:
-1. POST /api/docuseal/webhook (runtime nodejs, force-dynamic).
-2. Autenticação por header secreto compartilhado, valor em WEBHOOK_SECRET,
-   comparado com crypto.timingSafeEqual sobre buffers de mesmo tamanho.
-   Ausente ou divergente -> 401.
-3. Responda 200 em menos de 1s. Nenhum processamento pesado no request.
-4. Log estruturado do evento recebido: { event_type, submitter_id, submission_id,
-   status }. E-mail mascarado. NUNCA logar o payload completo nem o secret.
-5. Idempotência: projete a chave de deduplicação (submitter_id + event_type) e
-   deixe o ponto de gravação isolado atrás de uma interface, mas NÃO implemente
-   store agora.
-6. Correlação com o lead: o /api/init-form envia external_id = lead_id (UUID) no
-   submitter. Confirme na doc/payload do webhook onde esse valor volta
-   (external_id / application_key / metadata) e logue-o junto do evento.
+**Testes:** `webhook.test.js` (`verifySecret`, `parseEvent`, `redactSecret`)
++ `route.test.js` cobrindo todos os casos obrigatórios do prompt original,
+incluindo o teste explícito de injeção do segredo em campos do payload.
 
-Decisão arquitetural já tomada — não questione: nesta fase o webhook apenas
-valida, loga e responde 200. Não há persistência própria. O DocuSeal é a fonte de
-verdade dos documentos e os administradores consultam pelo admin dele. Um store
-externo entra na Fase D junto com o rate limit, quando houver requisito concreto
-de funil.
+**Verificado via `curl` local:** sem header → 401; header errado → 401;
+header + payload real de `form.completed` → 200 e log mascarado; JSON
+malformado → 400.
 
-Casos de teste obrigatórios:
-- sem header secreto -> 401
-- header com valor errado -> 401
-- header com tamanho diferente do esperado -> 401 sem exceção
-  (timingSafeEqual lança se os buffers têm tamanhos diferentes)
-- payload válido -> 200
-- payload sem os campos esperados -> 400, sem crash
-- WEBHOOK_SECRET ausente no ambiente -> 500, e o handler não aceita nada
-- teste explícito: injete WEBHOOK_SECRET em vários campos do payload e verifique
-  que nenhum log o imprime
-
-Critérios de aceite:
-- Suíte completa (A + C) passa
-- Teste local com túnel (vercel dev + ngrok, ou deploy de preview):
-  configure o webhook no admin do DocuSeal, assine um documento de teste,
-  e confirme o log do evento
-- Um 401 de tentativa inválida aparece no log com o IP, mas SEM ecoar o valor
-  recebido
-```
+**Não feito nesta sessão** (fora do repositório / requer infra adicional):
+- Cadastrar a URL do webhook no admin do DocuSeal (Settings → Webhooks →
+  Nova URL → `https://<APP_URL>/api/docuseal/webhook`, aba Secret com header
+  `X-Webhook-Secret` = `WEBHOOK_SECRET` de produção — eventos
+  `form.viewed/started/completed/declined` já vêm marcados por padrão).
+- Teste ponta a ponta com a instância real (precisa de túnel `ngrok` ou
+  deploy de preview, já que o dev server só existe em `localhost`).
 
 ---
 
-## Fase D — Rate limiting
+## Fase D — Rate limiting ✅ IMPLEMENTADA
 
-```
-Contexto: /api/init-form está aberto. Sem limite, alguém dispara milhares de
-submissions no DocuSeal, enche o banco do VPS (40 GB de disco) e potencialmente
-derruba o serviço. Isso precisa existir ANTES de a LP ir a público.
+> Feito em 30/08/2026. Pesquisa (dados de 2026, não memória de treino)
+> confirmou: "Vercel KV" nativo foi descontinuado e migrado para a Vercel
+> Marketplace com Upstash Redis. **Decisão do usuário: Upstash Redis**
+> (alternativa avaliada: Vercel WAF Rate Limiting nativo via
+> `@vercel/firewall` — descartada por exigir regra criada no painel da
+> Vercel, fora do repo, e não ser testável localmente com `npm run dev` +
+> `curl`, diferente do Upstash).
 
-Restrição fundamental: a LP roda serverless na Vercel. Estado em memória NÃO
-funciona — cada invocação pode cair num container diferente. Rate limit precisa
-de store externo.
+**O que foi feito:**
+1. `src/lib/rate-limit.js` — `readRateLimitConfig` (mesmo padrão de
+   `readWebhookConfig`, independente), `getClientIp` (primeiro valor de
+   `x-forwarded-for`, `"unknown"` se ausente), `checkRateLimit` — contador
+   de **janela fixa** (5 req/IP/10min) direto contra a REST API do Upstash
+   (`INCR`/`PEXPIRE`/`PTTL` via `fetch`, **sem** a lib `@upstash/ratelimit`
+   — decisão deliberada: a lib usa `EVAL`/Lua por baixo, difícil de mockar
+   fielmente em teste; REST crua segue o mesmo padrão de
+   `docuseal/client.js` e é trivial de testar).
+2. `src/app/api/init-form/route.js` — checa o rate limit como primeiro
+   passo do handler (antes de `readConfig()`); excedido → 429
+   `{ error: "too_many_requests" }` com header `Retry-After`. `json()`
+   ganhou um terceiro parâmetro para headers extras.
+3. **Fail-open** tanto para erro de runtime do Upstash quanto para
+   `UPSTASH_REDIS_REST_URL`/`TOKEN` ausentes — decisão consciente: rate
+   limit é camada defensiva sobre um endpoint que já funciona sem ela,
+   diferente das envs do DocuSeal (essenciais à função do endpoint).
+4. `.env.example`/`.env.local` ganharam as duas novas envs (opcionais).
 
-Tarefa:
-1. Pesquise as opções de free tier disponíveis hoje (Vercel KV, Upstash Redis,
-   ou alternativa equivalente) e me apresente uma recomendação com trade-offs
-   antes de implementar. Espere minha confirmação.
-2. Implemente rate limit em /api/init-form: 5 requisições por IP a cada 10 minutos.
-3. Extraia o IP de forma correta para a Vercel (o primeiro valor de
-   x-forwarded-for, não o socket).
-4. Excedido -> 429 com header Retry-After.
-5. Falha do store NÃO pode derrubar o endpoint: em caso de erro do Redis,
-   registre no log e permita a requisição (fail-open). Justifique essa escolha
-   ou proponha fail-closed com argumento.
+**Testes:** todos os casos obrigatórios cobertos em `rate-limit.test.js` e
+`route.test.js` (5 passam / 6ª bloqueia, IP diferente não afetado, janela
+expira e libera, store indisponível libera com log, `x-forwarded-for` com
+múltiplos IPs usa o primeiro, ausente não lança, sem env configurada o
+endpoint segue funcionando normalmente).
 
-Casos de teste obrigatórios:
-- 5 requisições passam, a 6ª -> 429
-- IP diferente não é afetado
-- janela expira e libera novamente
-- store indisponível -> requisição passa e o erro é logado
-- x-forwarded-for com múltiplos IPs -> usa o primeiro
-- x-forwarded-for ausente -> não crasha
-
-Critérios de aceite:
-- Suíte completa passa, com o store mockado nos testes
-- npm run lint limpo
-- Teste manual: 6 curls seguidos, o último devolve 429
-```
+**Verificado ponta a ponta com Upstash real** (conta provisionada via
+Vercel Marketplace): 5 requisições da mesma IP → 200, a 6ª → 429 com
+`retry-after: 589` e `{"error":"too_many_requests"}`. Submissions de teste
+criadas no DocuSeal durante a verificação foram arquivadas depois. Falta só
+cadastrar `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` nas
+Environment Variables da Vercel para produção.
 
 ---
 
-## Fase E — Backups do VPS
+## Fase E — Backups do VPS ✅ IMPLEMENTADA
 
-```
-Contexto: os Backups da Hetzner estão DESLIGADOS por restrição de orçamento e não
-existe backup nenhum. Se o servidor for perdido hoje, todos os documentos
-assinados vão junto. Esta é a maior dívida técnica aberta do projeto.
+> Feito em 30/08/2026. Bloqueio resolvido nesta sessão: `~/.ssh/config`
+> desta máquina não tinha o alias `docuseal`; o usuário autorizou a chave
+> local em `deploy@docuseal.h06.online` e a conexão foi confirmada antes de
+> qualquer coisa. Levantamento real do servidor (containers, volumes,
+> disco, timezone, timers existentes) feito via SSH antes de escrever os
+> scripts — ver "Estado atual" no `CLAUDE.md`.
 
-Atenção ao escopo: esta fase mexe em scripts/ e no VPS, NÃO no código da LP.
+**O que foi feito:**
+1. `scripts/backup.sh` — `pg_dump -Fc` do Postgres dentro do container
+   (`docker compose exec`), `tar.gz` do volume `docuseal_app_data` via
+   container `alpine` efêmero (não mexe no `app` rodando), verificação de
+   integridade com `pg_restore --list` (falha se não achar nenhuma
+   `TABLE`), aborta se `<5GB` livres, retenção local de 7 dias,
+   `set -euo pipefail` + `trap` que remove artefatos parciais em falha.
+   Credenciais sempre lidas de `/opt/docuseal/.env` em runtime, nunca
+   hardcoded.
+2. `scripts/restore.sh` — caminho inverso (dropdb/createdb/pg_restore +
+   reextração do volume), **destrutivo por design**: exige digitar
+   `restaurar` antes de tocar em qualquer coisa; sem TTY/confirmação,
+   falha fechado.
+3. `scripts/systemd/docuseal-backup.service` + `.timer` —
+   `OnCalendar=*-*-* 03:00:00 America/Sao_Paulo` (explícito, mesmo o
+   sistema já estando nesse fuso), `Persistent=true` (não perde o backup
+   do dia se o servidor estiver fora do ar às 3h).
+4. `scripts/deploy.sh` (novo — resolve uma inconsistência entre o
+   `CLAUDE.md`, que já prometia `deploy.sh` nascendo nesta fase, e o
+   detalhamento da tarefa, que só citava `backup.sh`/`restore.sh`): rsync
+   de `infra/` e de `scripts/backup.sh`/`restore.sh`/`systemd/` pro
+   servidor + `docker compose up -d`. **Sem `--delete`** (apagaria
+   `backups/` e `scripts/`, que não existem em `infra/` localmente).
 
-Tarefa:
-1. Crie scripts/backup.sh que gere, em /opt/docuseal/backups/ no servidor:
-   - dump lógico do Postgres via pg_dump -Fc (formato custom)
-   - tar.gz do volume app_data (arquivos e PDFs do DocuSeal)
-   Nome com timestamp ISO. Retenção local de 7 dias.
-2. set -euo pipefail, falha ruidosa, idempotente.
-3. Verificação de integridade: após o dump, rode pg_restore --list e falhe se
-   não listar tabelas.
-4. Aborte com erro claro se restarem menos de 5 GB livres no disco (total: 40 GB).
-5. Crie scripts/restore.sh documentando o caminho inverso, com confirmação
-   interativa antes de sobrescrever qualquer coisa.
-6. Agende via systemd timer (NÃO cron): diário às 03:00 America/Sao_Paulo.
-   Crie os arquivos .service e .timer e me dê os comandos de instalação.
+**Testado de verdade no VPS** (não só localmente):
+- `backup.sh` rodado duas vezes seguidas — gerou dois conjuntos de
+  arquivos distintos, sem corromper nada.
+- `pg_restore --list` confirmado com 473 TOC entries reais (tabelas do
+  schema do DocuSeal).
+- Timer instalado (`sudo systemctl enable --now`) e disparado manualmente
+  (`systemctl start docuseal-backup.service`) — `status=0/SUCCESS`,
+  `TriggeredBy: docuseal-backup.timer` confirmado.
+- `systemctl list-timers` mostrando o próximo disparo (03:00 do dia
+  seguinte).
+- `bash -n` e `shellcheck` (via `docker run koalaman/shellcheck:stable`)
+  limpos nos 4 scripts.
+- Artefatos de teste extras foram limpos do servidor — ficou só o backup
+  real mais recente.
 
-Restrições:
-- pg_dump roda DENTRO do container postgres (docker compose exec), não no host
-- Credenciais lidas de /opt/docuseal/.env, nunca hardcoded
-- Os scripts vivem no repo e vão para o servidor por ./scripts/deploy.sh
+**Não feito (deliberadamente, ver `restore.sh` acima):** não rodei
+`restore.sh` contra o banco/volume reais — é destrutivo por natureza
+(apaga e recria o banco `docuseal` e o conteúdo de `app_data` de verdade).
+Validado só por `bash -n`/`shellcheck`/revisão lógica. Um teste real
+precisaria de uma janela de manutenção dedicada ou ambiente descartável.
 
-Critérios de aceite:
-- bash -n passa em ambos
-- shellcheck limpo:
-  docker run --rm -v "$PWD:/mnt" koalaman/shellcheck:stable scripts/*.sh
-- Execução manual gera os artefatos e o pg_restore --list lista tabelas
-- Rodar duas vezes seguidas não corrompe nada
-- systemctl list-timers mostra o timer agendado
+---
 
-Ao final, apresente o plano (só o plano, não implemente) para enviar os backups
-para fora do servidor usando o free tier do Cloudflare R2.
-```
+### Plano — backup off-site com Cloudflare R2 (não implementado, só o plano)
+
+**Por quê:** o backup local (Fase E) protege contra corrupção/erro no
+Postgres ou no volume, mas não contra perda do VPS inteiro (disco morto,
+conta Hetzner suspensa, etc.) — nesse cenário local + off-site é que
+garante recuperação.
+
+**Por que R2:** free tier de 10 GB de storage e, principal vantagem sobre
+S3, **egress gratuito** (importante se algum dia precisar restaurar
+puxando os arquivos de volta) — não precisa de cartão de crédito para o
+tier grátis.
+
+1. **Bucket**: criar um bucket privado no Cloudflare R2 (dashboard →
+   R2 → Create bucket), sem acesso público — só API S3-compatível.
+2. **Credenciais**: gerar um R2 API Token (Account → R2 → Manage API
+   Tokens) com permissão restrita **só a esse bucket** (least privilege) —
+   gera um par `Access Key ID`/`Secret Access Key` compatível com S3.
+   Guardar em `/opt/docuseal/.env` como `R2_ACCESS_KEY_ID`/
+   `R2_SECRET_ACCESS_KEY`/`R2_BUCKET`/`R2_ENDPOINT` (nunca hardcoded, mesmo
+   padrão das credenciais do Postgres).
+3. **Ferramenta de sync**: `rclone` (binário único, suporta R2
+   nativamente como backend S3-compatível, `rclone sync` é idempotente e
+   só transfere o que mudou) — mais simples que escrever chamadas SigV4 na
+   mão. Instalar no VPS (`apt install rclone` ou binário oficial),
+   configurar via `rclone.conf` gerado a partir das env vars do `.env`
+   (não interativo, gerado pelo próprio script).
+4. **Novo `scripts/offsite-sync.sh`**: roda **depois** de `backup.sh`
+   (mesmo `docuseal-backup.service`, como um segundo `ExecStart=` — ou um
+   `.service` separado encadeado via `OnSuccess=`), faz
+   `rclone sync /opt/docuseal/backups/ r2:$R2_BUCKET/` — sobe só os
+   arquivos novos desde o último sync (rclone já é incremental).
+5. **Retenção no R2**: pensar separado da retenção local (7 dias) —
+   como o storage é praticamente grátis até 10GB, faz sentido manter mais
+   histórico off-site (ex.: 30 dias) via `rclone` com uma flag de
+   `--max-age` no sync ou uma regra de lifecycle no próprio bucket R2.
+6. **Falha do sync não deve travar o backup local** — mesmo raciocínio de
+   fail-open já usado no rate limit (Fase D): se o R2 estiver
+   indisponível, o backup local (que já é o mais crítico) continua valendo,
+   só loga o erro do sync.
+7. **Teste de restauração**: documentar como puxar de volta
+   (`rclone copy r2:$R2_BUCKET/postgres_TIMESTAMP.dump
+   /opt/docuseal/backups/`) antes de rodar `restore.sh` normalmente — útil
+   justamente no cenário de VPS perdido, restaurando num servidor novo.
+
+Escopo sugerido para uma fase futura (não esta sessão): criar o bucket e o
+token (ação manual do usuário, como o Upstash na Fase D), depois
+implementar `offsite-sync.sh` + encadear no systemd + testar de verdade
+subindo e puxando um arquivo de teste do R2.
 
 ---
 

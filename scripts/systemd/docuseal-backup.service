@@ -1,0 +1,10 @@
+[Unit]
+Description=Backup do DocuSeal (Postgres + app_data)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/opt/docuseal
+ExecStart=/opt/docuseal/scripts/backup.sh

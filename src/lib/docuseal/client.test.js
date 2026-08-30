@@ -8,6 +8,7 @@ const DEPS = {
   templateId: "7",
   role: "Manifestante",
   origem: "lp-carbono",
+  appUrl: "https://lp.example",
 };
 
 const INPUT = {
@@ -84,6 +85,14 @@ describe("createSubmission", () => {
     const [submitter] = bodySent(fetchMock).submitters;
     expect(submitter.values.email).toBe("j@ex.com");
     expect(submitter.metadata.email).toBe("j@ex.com");
+  });
+
+  it("inclui completed_redirect_url com appUrl e leadId", async () => {
+    const fetchMock = fetchReturning(fakeResponse());
+    await createSubmission({ ...DEPS, fetch: fetchMock }, INPUT);
+
+    const [submitter] = bodySent(fetchMock).submitters;
+    expect(submitter.completed_redirect_url).toBe("https://lp.example/obrigado?lead_id=lead-uuid-1");
   });
 
   it("mescla extraValues da allowlist sem sobrescrever nome_completo/telefone", async () => {

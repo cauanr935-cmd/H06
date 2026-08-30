@@ -64,38 +64,6 @@
   width: 100%;
 }
 
-.embed {
-  width: 100%;
-}
-
-.embed:focus {
-  outline: none;
-}
-
-.sucesso {
-  padding: 16px 18px;
-  border: 1.5px solid var(--color-green);
-  border-radius: 8px;
-  background: #eaf5ee;
-  margin-bottom: 16px;
-}
-
-.sucesso h3 {
-  margin: 0 0 4px;
-  font-size: 18px;
-  color: var(--color-green-dark);
-}
-
-.sucesso h3:focus {
-  outline: none;
-}
-
-.sucesso p {
-  margin: 0;
-  font-size: 14px;
-  color: var(--color-black);
-}
-
 @media (max-width: 640px) {
   .flow {
     max-width: 100%;

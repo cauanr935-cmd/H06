@@ -2,7 +2,8 @@
  * POST /api/init-form
  *
  * Recebe { name, phone, email?, values? } da LP, cria a submission no DocuSeal e
- * devolve { slug, embed_src, lead_id } para o front renderizar o <docuseal-form>.
+ * devolve { slug, embed_src, lead_id } para o front redirecionar o usuário
+ * (mesma aba) até o formulário de assinatura em embed_src.
  * Só wiring HTTP — a lógica vive em src/lib/.
  */
 
@@ -12,17 +13,33 @@ import { readConfig } from "../../../lib/docuseal/config.js";
 import { parseBody, validate } from "../../../lib/docuseal/validate.js";
 import { createSubmission } from "../../../lib/docuseal/client.js";
 import { maskEmail, maskPhone } from "../../../lib/mask.js";
+import { readRateLimitConfig, getClientIp, checkRateLimit } from "../../../lib/rate-limit.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
-function json(status, body) {
-  return Response.json(body, { status, headers: NO_STORE });
+function json(status, body, extraHeaders = {}) {
+  return Response.json(body, { status, headers: { ...NO_STORE, ...extraHeaders } });
 }
 
 export async function POST(request) {
+  const rlCfg = readRateLimitConfig();
+  if (rlCfg.ok) {
+    const ip = getClientIp(request);
+    const { limited, retryAfterSeconds } = await checkRateLimit(
+      { fetch: globalThis.fetch, ...rlCfg.config },
+      { identifier: ip },
+    );
+    if (limited) {
+      console.error("[init-form] rate limit excedido", { ip });
+      return json(429, { error: "too_many_requests" }, { "Retry-After": String(retryAfterSeconds) });
+    }
+  } else {
+    console.error("[init-form] rate limit desabilitado, faltam:", rlCfg.missing.join(", "));
+  }
+
   const cfg = readConfig();
   if (!cfg.ok) {
     console.error("[init-form] configuração incompleta, faltam:", cfg.missing.join(", "));

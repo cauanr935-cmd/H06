@@ -7,7 +7,64 @@ const ENV = {
   DOCUSEAL_TOKEN: "tok_secreto",
   DOCUSEAL_TEMPLATE_ID: "7",
   SUBMITTER_ROLE: "Manifestante",
+  APP_URL: "https://lp.example",
 };
+
+const RATE_LIMIT_ENV = {
+  UPSTASH_REDIS_REST_URL: "https://fake-upstash",
+  UPSTASH_REDIS_REST_TOKEN: "tok_rl",
+};
+
+function reqFrom(ip, body = { name: "João", phone: "11999998888" }) {
+  return new Request("http://localhost/api/init-form", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-forwarded-for": ip },
+    body: JSON.stringify(body),
+  });
+}
+
+/** Fake mínimo da REST API do Upstash (incr/pexpire/pttl), mesmo formato do rate-limit.test.js. */
+function fakeUpstashStore() {
+  const store = new Map();
+  return {
+    handle(url) {
+      const path = url.replace(/^https:\/\/fake-upstash\//, "");
+      const [cmd, ...rest] = path.split("/");
+      if (cmd === "incr") {
+        const key = decodeURIComponent(rest[0]);
+        const now = Date.now();
+        const entry = store.get(key);
+        if (!entry || (entry.expiresAt && entry.expiresAt <= now)) {
+          store.set(key, { count: 1, expiresAt: null });
+          return { ok: true, json: async () => ({ result: 1 }) };
+        }
+        entry.count += 1;
+        return { ok: true, json: async () => ({ result: entry.count }) };
+      }
+      if (cmd === "pexpire") {
+        const key = decodeURIComponent(rest[0]);
+        const entry = store.get(key);
+        if (entry) entry.expiresAt = Date.now() + Number(rest[1]);
+        return { ok: true, json: async () => ({ result: 1 }) };
+      }
+      if (cmd === "pttl") {
+        const key = decodeURIComponent(rest[0]);
+        const entry = store.get(key);
+        const ms = entry?.expiresAt ? entry.expiresAt - Date.now() : -1;
+        return { ok: true, json: async () => ({ result: ms }) };
+      }
+      throw new Error(`comando não simulado: ${cmd}`);
+    },
+  };
+}
+
+/** fetch que roteia entre o fake do Upstash e uma resposta padrão de sucesso do DocuSeal. */
+function multiFetch(upstash) {
+  return vi.fn(async (url) => {
+    if (url.startsWith("https://fake-upstash")) return upstash.handle(url);
+    return { ok: true, status: 200, text: async () => JSON.stringify([{ slug: "abc", embed_src: "https://x/s/abc" }]) };
+  });
+}
 
 function req(body, { raw = false } = {}) {
   return new Request("http://localhost/api/init-form", {
@@ -47,6 +104,18 @@ describe("POST /api/init-form", () => {
     expect(await res.json()).toEqual({ error: "server_misconfigured" });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("500 server_misconfigured quando falta APP_URL, sem chamar o DocuSeal", async () => {
+    const fetchMock = okFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    const { APP_URL, ...semAppUrl } = ENV;
+    setEnv(semAppUrl);
+
+    const res = await POST(req({ name: "X", phone: "(11) 99999-8888" }));
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "server_misconfigured" });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("400 invalid_json para corpo malformado", async () => {
@@ -119,6 +188,18 @@ describe("POST /api/init-form", () => {
     expect(sent.submitters[0].values.municipio_uf).toBe("Sorriso/MT");
   });
 
+  it("payload inclui completed_redirect_url com o lead_id gerado", async () => {
+    setEnv();
+    const fetchMock = okFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await POST(req({ name: "João", phone: "11999998888" }));
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(sent.submitters[0].completed_redirect_url).toMatch(
+      /^https:\/\/lp\.example\/obrigado\?lead_id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+  });
+
   it("502 upstream_error em 401, sem ecoar o corpo do upstream", async () => {
     setEnv();
     vi.stubGlobal(
@@ -157,5 +238,73 @@ describe("POST /api/init-form", () => {
     vi.stubGlobal("fetch", okFetch());
     const res = await POST(req({ name: "João", phone: "11999998888" }));
     expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+});
+
+describe("POST /api/init-form — rate limit", () => {
+  it("5 requisições da mesma IP passam, a 6ª -> 429 com Retry-After", async () => {
+    setEnv({ ...ENV, ...RATE_LIMIT_ENV });
+    vi.stubGlobal("fetch", multiFetch(fakeUpstashStore()));
+
+    for (let i = 0; i < 5; i++) {
+      const res = await POST(reqFrom("1.1.1.1"));
+      expect(res.status).toBe(200);
+    }
+    const sixth = await POST(reqFrom("1.1.1.1"));
+    expect(sixth.status).toBe(429);
+    expect(await sixth.json()).toEqual({ error: "too_many_requests" });
+    expect(sixth.headers.get("retry-after")).toMatch(/^\d+$/);
+  });
+
+  it("uma IP diferente não é afetada pelo contador da primeira", async () => {
+    setEnv({ ...ENV, ...RATE_LIMIT_ENV });
+    vi.stubGlobal("fetch", multiFetch(fakeUpstashStore()));
+
+    for (let i = 0; i < 6; i++) await POST(reqFrom("1.1.1.1"));
+    const res = await POST(reqFrom("2.2.2.2"));
+    expect(res.status).toBe(200);
+  });
+
+  it("x-forwarded-for com múltiplos IPs usa o primeiro", async () => {
+    setEnv({ ...ENV, ...RATE_LIMIT_ENV });
+    const upstash = fakeUpstashStore();
+    vi.stubGlobal("fetch", multiFetch(upstash));
+
+    for (let i = 0; i < 6; i++) {
+      await POST(reqFrom("9.9.9.9, 10.0.0.1, 10.0.0.2"));
+    }
+    const res = await POST(reqFrom("9.9.9.9"));
+    expect(res.status).toBe(429);
+  });
+
+  it("x-forwarded-for ausente não lança, segue o fluxo normal", async () => {
+    setEnv({ ...ENV, ...RATE_LIMIT_ENV });
+    vi.stubGlobal("fetch", multiFetch(fakeUpstashStore()));
+
+    const res = await POST(req({ name: "João", phone: "11999998888" }));
+    expect(res.status).toBe(200);
+  });
+
+  it("Upstash indisponível: requisição passa normalmente (fail-open), erro logado", async () => {
+    setEnv({ ...ENV, ...RATE_LIMIT_ENV });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (url.startsWith("https://fake-upstash")) throw new Error("network down");
+        return { ok: true, status: 200, text: async () => JSON.stringify([{ slug: "abc", embed_src: "https://x/s/abc" }]) };
+      }),
+    );
+
+    const res = await POST(reqFrom("1.1.1.1"));
+    expect(res.status).toBe(200);
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it("sem UPSTASH_REDIS_REST_URL/TOKEN no ambiente, o endpoint continua funcionando normalmente", async () => {
+    setEnv(); // sem RATE_LIMIT_ENV — mesmo comportamento das Fases A/B/C
+    vi.stubGlobal("fetch", okFetch());
+
+    const res = await POST(reqFrom("1.1.1.1"));
+    expect(res.status).toBe(200);
   });
 });
