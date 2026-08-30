@@ -397,6 +397,5 @@ Cloud e OSS sem distinguir.
 **Pendente:**
 - Backup off-site (Cloudflare R2) — só o plano existe (ver `PROMPTS-FASES.md`, fechamento da Fase E), não implementado. Depende de você criar o bucket + API token no Cloudflare primeiro
 - Teste real de `restore.sh` contra `docuseal`/`docuseal_app_data` de verdade (com o site fora do ar) — só numa janela de manutenção dedicada, se/quando quiser essa garantia final
-- Teste real de `restore.sh` **contra `docuseal`/`docuseal_app_data` de verdade** (com o site fora do ar) ainda não foi feito — só numa janela de manutenção dedicada, se/quando você quiser essa garantia final
 
 **Divergência `vite build`:** resolvida — o `CLAUDE.md` novo já usa `next build`. O `vite build` estava no `claude.md` antigo (deletado, falta commitar).
