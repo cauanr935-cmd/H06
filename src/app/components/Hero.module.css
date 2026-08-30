@@ -1,0 +1,36 @@
+.hero {
+  padding: 56px 32px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: flex-start;
+  max-width: 720px;
+}
+
+.hero h1 {
+  font-size: 40px;
+  line-height: 1.15;
+  margin: 0;
+  color: var(--color-black);
+}
+
+.hero p {
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--color-muted);
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.secondary {
+  font-size: 15px;
+  color: var(--color-green);
+  text-decoration: none;
+  border-bottom: 1.5px solid var(--color-green);
+}

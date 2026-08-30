@@ -1,0 +1,50 @@
+.signCta {
+  margin: 0 32px 56px;
+  padding: 32px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.signCta h2 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.signCta p {
+  margin: 0;
+  max-width: 380px;
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.button {
+  font-size: 17px;
+  padding: 15px 32px;
+}
+
+.docLink {
+  font-size: 14px;
+  color: var(--color-green);
+  text-decoration: none;
+  border-bottom: 1.5px solid var(--color-green);
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--color-muted);
+}
