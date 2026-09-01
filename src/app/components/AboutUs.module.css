@@ -1,6 +1,7 @@
 .aboutUs {
   margin: 0 32px 32px;
   padding: 24px 26px;
+  border: 1.5px dashed var(--color-border);
   border-radius: 10px;
   background: var(--color-surface);
   display: flex;
@@ -13,12 +14,60 @@
   font-size: 24px;
 }
 
-.aboutUs p {
+.summary {
   margin: 0;
   color: var(--color-muted);
   line-height: 1.55;
   font-size: 17px;
-  max-width: 720px;
+  max-width: 640px;
+}
+
+.toggle {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--color-green);
+}
+
+.icon {
+  font-weight: 700;
+  font-size: 18px;
+  transition: transform 0.25s ease;
+}
+
+.iconOpen {
+  transform: rotate(45deg);
+}
+
+.moreWrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s ease;
+}
+
+.moreOpen {
+  grid-template-rows: 1fr;
+}
+
+.moreInner {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.moreInner p {
+  margin: 0;
+  color: var(--color-muted);
+  line-height: 1.55;
+  font-size: 16px;
+  max-width: 640px;
 }
 
 @media (max-width: 640px) {
@@ -31,7 +80,11 @@
     font-size: 21px;
   }
 
-  .aboutUs p {
+  .summary {
     font-size: 16px;
+  }
+
+  .moreInner p {
+    font-size: 15px;
   }
 }
