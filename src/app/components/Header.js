@@ -10,6 +10,7 @@ export default function Header() {
         <span className={styles.name}>Hectare06</span>
       </div>
       <nav className={styles.nav}>
+        <a href="#quem-somos">Quem somos</a>
         <a href="#projeto">O projeto</a>
         <a href="#duvidas">Dúvidas</a>
         <a href="#assinar" className={styles.navActive}>

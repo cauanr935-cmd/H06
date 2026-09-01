@@ -1,0 +1,37 @@
+.aboutUs {
+  margin: 0 32px 32px;
+  padding: 24px 26px;
+  border-radius: 10px;
+  background: var(--color-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.aboutUs h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.aboutUs p {
+  margin: 0;
+  color: var(--color-muted);
+  line-height: 1.55;
+  font-size: 17px;
+  max-width: 720px;
+}
+
+@media (max-width: 640px) {
+  .aboutUs {
+    margin: 0 20px 28px;
+    padding: 20px;
+  }
+
+  .aboutUs h2 {
+    font-size: 21px;
+  }
+
+  .aboutUs p {
+    font-size: 16px;
+  }
+}

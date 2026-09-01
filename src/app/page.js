@@ -1,5 +1,6 @@
 import Header from "./components/Header";
 import Hero from "./components/Hero";
+import AboutUs from "./components/AboutUs";
 import AboutLetter from "./components/AboutLetter";
 import Founders from "./components/Founders";
 import Faq from "./components/Faq";
@@ -13,6 +14,7 @@ export default function Home() {
     <main>
       <Header />
       <Hero signHref={SIGN_HREF} />
+      <AboutUs />
       <AboutLetter />
       <Founders />
       <Faq />
